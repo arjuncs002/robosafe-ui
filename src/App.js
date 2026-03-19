@@ -2,12 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
-// ─── flag colours ─────────────────────────────────────────────────────────────
 const FLAG_COLORS = {
-  detected:  "#f59e0b",   // 🟡 initial detection
-  arrived:   "#3b82f6",   // 📍 rover arrived
-  alive:     "#22c55e",   // 🟢 confirmed alive
-  not_alive: "#ef4444",   // 🔴 not alive / doubtful
+  detected:  "#f59e0b",
+  arrived:   "#3b82f6",
+  alive:     "#22c55e",
+  not_alive: "#ef4444",
 };
 const FLAG_LABELS = {
   detected:  "👁 Detected",
@@ -32,43 +31,42 @@ export default function App() {
   const [driveModalOpen,         setDriveModalOpen]         = useState(false);
   const [detailsModalOpen,       setDetailsModalOpen]       = useState(false);
   const [lifeDetectionModalOpen, setLifeDetectionModalOpen] = useState(false);
-  const [mapModalOpen,           setMapModalOpen]           = useState(false);
-  const [lifeConfirmFlag,        setLifeConfirmFlag]        = useState(null);  // flag awaiting confirm
 
   // ── settings ──────────────────────────────────────────────────────────────
-  const [alertSound,           setAlertSound]           = useState("Siren");
-  const [bgColor,              setBgColor]              = useState("#0a1020");
-  const [autoFullscreen,       setAutoFullscreen]       = useState(false);
-  const [refreshRateMs,        setRefreshRateMs]        = useState(250);
-  const [showOverlays,         setShowOverlays]         = useState(true);
-  const [confidenceThreshold,  setConfidenceThreshold]  = useState(0.5);
+  const [alertSound,          setAlertSound]          = useState("Siren");
+  const [bgColor,             setBgColor]             = useState("#0a1020");
+  const [autoFullscreen,      setAutoFullscreen]      = useState(false);
+  const [refreshRateMs,       setRefreshRateMs]       = useState(250);
+  const [showOverlays,        setShowOverlays]        = useState(true);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
 
   // ── detection state ───────────────────────────────────────────────────────
-  const [thermalCount,     setThermalCount]     = useState(0);
-  const [detections,       setDetections]       = useState([]);
-  const [mmwaveStatus,     setMmwaveStatus]     = useState("NO PRESENCE DETECTED");
-  const [mmwaveRespiration,setMmwaveRespiration]= useState(false);
-  const [mmwaveDistance,   setMmwaveDistance]   = useState(0);
-  const [mmwaveEnergyMin,  setMmwaveEnergyMin]  = useState(0);
-  const [mmwaveEnergyMax,  setMmwaveEnergyMax]  = useState(0);
-  const [mmwaveEnergyDelta,setMmwaveEnergyDelta]= useState(0);
-  const [mmwaveEnabled,    setMmwaveEnabled]    = useState(true);
+  const [thermalCount,      setThermalCount]      = useState(0);
+  const [detections,        setDetections]        = useState([]);
+  const [mmwaveStatus,      setMmwaveStatus]      = useState("SENSOR DISABLED");
+  const [mmwaveRespiration, setMmwaveRespiration] = useState(false);
+  const [mmwaveDistance,    setMmwaveDistance]    = useState(0);
+  const [mmwaveEnergyMin,   setMmwaveEnergyMin]   = useState(0);
+  const [mmwaveEnergyMax,   setMmwaveEnergyMax]   = useState(0);
+  const [mmwaveEnergyDelta, setMmwaveEnergyDelta] = useState(0);
+  const [mmwaveEnabled,     setMmwaveEnabled]     = useState(false); // OFF by default
 
   // ── drive mode ────────────────────────────────────────────────────────────
-  const [driveMode,        setDriveMode]        = useState("MANUAL");  // MANUAL | AUTO
-  const [activeCommand,    setActiveCommand]    = useState("STOP");
-  const [commandHistory,   setCommandHistory]   = useState([]);
+  const [driveMode,      setDriveMode]      = useState("MANUAL");
+  const [activeCommand,  setActiveCommand]  = useState("STOP");
+  const [commandHistory, setCommandHistory] = useState([]);
 
   // ── map state ─────────────────────────────────────────────────────────────
   const [mapState, setMapState] = useState({
-    rover_x: 0, rover_y: 0, rover_heading: 0,
-    flags: [], track: [],
+    rover_x: 0, rover_y: 0, rover_heading: 0, flags: [], track: [],
   });
   const mapCanvasRef = useRef(null);
 
-  // ── alert / siren ─────────────────────────────────────────────────────────
-  const [sirenActive, setSirenActive] = useState(false);
+  // ── alert / siren + mmwave popup ──────────────────────────────────────────
+  const [sirenActive,    setSirenActive]    = useState(false);
+  const [arrivalPopup,   setArrivalPopup]   = useState(false); // popup shown on arrival
   const sirenRef = useRef(null);
+  const prevAlertTsRef = useRef(0);
 
   // ── history ───────────────────────────────────────────────────────────────
   const [historyRows,    setHistoryRows]    = useState([]);
@@ -76,18 +74,17 @@ export default function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // ── password change ───────────────────────────────────────────────────────
-  const [curPw,    setCurPw]   = useState("");
-  const [newPw,    setNewPw]   = useState("");
-  const [newPw2,   setNewPw2]  = useState("");
-  const [pwMsg,    setPwMsg]   = useState("");
-  const [showCurPw,setShowCurPw] = useState(false);
-  const [showNewPw,setShowNewPw] = useState(false);
+  const [curPw,     setCurPw]    = useState("");
+  const [newPw,     setNewPw]    = useState("");
+  const [newPw2,    setNewPw2]   = useState("");
+  const [pwMsg,     setPwMsg]    = useState("");
+  const [showCurPw, setShowCurPw]= useState(false);
+  const [showNewPw, setShowNewPw]= useState(false);
   const [showNewPw2,setShowNewPw2]=useState(false);
 
   const commandIntervalRef = useRef(null);
   const clickIntervalRef   = useRef(null);
   const prevCountRef       = useRef(0);
-  const prevAlertRef       = useRef(0);
 
   // ── activity / lock ───────────────────────────────────────────────────────
   const markActivity = () => {
@@ -107,14 +104,10 @@ export default function App() {
       sirenRef.current = null;
     }
     setSirenActive(false);
-    // Tell backend alert cleared
-    fetch(`${API_BASE}/api/alert/clear`, {
-      method: "POST", headers: { Authorization: `Bearer ${token}` }
-    }).catch(() => {});
   };
 
   const playSirenLoop = () => {
-    if (sirenRef.current) return;  // already playing
+    if (sirenRef.current) return;
     try {
       const ctx  = new (window.AudioContext || window.webkitAudioContext)();
       const osc  = ctx.createOscillator();
@@ -128,7 +121,7 @@ export default function App() {
       const id = setInterval(() => {
         const f = osc.frequency.value;
         if (up) { osc.frequency.value = Math.min(1200, f + 80); if (f >= 1200) up = false; }
-        else    { osc.frequency.value = Math.max(350, f - 80);  if (f <= 350)  up = true;  }
+        else    { osc.frequency.value = Math.max(350,  f - 80); if (f <= 350)  up = true;  }
       }, 80);
       sirenRef.current = { osc, ctx, id };
       setSirenActive(true);
@@ -156,9 +149,22 @@ export default function App() {
   };
 
   const playAlert = () => {
-    if (alertSound === "Beep") return playBeep();
-    if (alertSound === "Siren") return playSirenLoop();
+    if (alertSound === "Beep")        return playBeep();
+    if (alertSound === "Siren")       return playSirenLoop();
     if (alertSound === "Voice Alert") return playVoice();
+  };
+
+  // ── dismiss arrival popup ─────────────────────────────────────────────────
+  const dismissArrivalPopup = async () => {
+    setArrivalPopup(false);
+    stopSiren();
+    // Tell backend alert is cleared
+    try {
+      await fetch(`${API_BASE}/api/alert/clear`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {}
   };
 
   // ── commands ──────────────────────────────────────────────────────────────
@@ -222,22 +228,6 @@ export default function App() {
     } catch {}
   };
 
-  // ── life confirmation ─────────────────────────────────────────────────────
-  const confirmLife = async (result) => {
-    if (!token) return;
-    try {
-      await fetch(`${API_BASE}/api/life_confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ result }),
-      });
-      setLifeConfirmFlag(null);
-      stopSiren();
-      // Refresh map
-      fetchMapState();
-    } catch {}
-  };
-
   // ── map data ──────────────────────────────────────────────────────────────
   const fetchMapState = useCallback(async () => {
     if (!token) return;
@@ -253,28 +243,25 @@ export default function App() {
     if (!window.confirm("Clear map and all flags?")) return;
     try {
       await fetch(`${API_BASE}/api/map/flags`, {
-        method: "DELETE", headers: { Authorization: `Bearer ${token}` }
+        method: "DELETE", headers: { Authorization: `Bearer ${token}` },
       });
       fetchMapState();
     } catch {}
   };
 
-  // ── draw map on canvas ────────────────────────────────────────────────────
+  // ── draw map canvas ───────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = mapCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     const W = canvas.width;
     const H = canvas.height;
-
-    // world → canvas transform: 1 metre = 60 px, origin at centre
     const SCALE = 60;
     const ox = W / 2;
     const oy = H / 2;
     const wx = (x) => ox + x * SCALE;
-    const wy = (y) => oy - y * SCALE;   // y-up
+    const wy = (y) => oy - y * SCALE;
 
-    // Background
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = "#0a1020";
     ctx.fillRect(0, 0, W, H);
@@ -282,11 +269,10 @@ export default function App() {
     // Grid
     ctx.strokeStyle = "rgba(255,255,255,0.06)";
     ctx.lineWidth = 1;
-    const gridStep = SCALE;  // 1 m
-    for (let gx = ox % gridStep; gx < W; gx += gridStep) {
+    for (let gx = ox % SCALE; gx < W; gx += SCALE) {
       ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
     }
-    for (let gy = oy % gridStep; gy < H; gy += gridStep) {
+    for (let gy = oy % SCALE; gy < H; gy += SCALE) {
       ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
     }
 
@@ -295,13 +281,12 @@ export default function App() {
     ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(W, oy); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, H); ctx.stroke();
 
-    // Scale label
+    // Scale bar
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.font = "11px monospace";
     ctx.fillText("1m", ox + SCALE - 14, oy - 4);
-    ctx.beginPath();
     ctx.strokeStyle = "rgba(255,255,255,0.35)";
-    ctx.moveTo(ox, oy - 3); ctx.lineTo(ox + SCALE, oy - 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ox, oy - 3); ctx.lineTo(ox + SCALE, oy - 3); ctx.stroke();
 
     // Track
     const track = mapState.track;
@@ -327,11 +312,9 @@ export default function App() {
 
     // Flags
     mapState.flags.forEach(flag => {
-      const fx = wx(flag.x);
-      const fy = wy(flag.y);
+      const fx  = wx(flag.x);
+      const fy  = wy(flag.y);
       const col = FLAG_COLORS[flag.flag_type] || "#888";
-
-      // Circle
       ctx.beginPath();
       ctx.arc(fx, fy, 10, 0, Math.PI * 2);
       ctx.fillStyle = col + "44";
@@ -339,47 +322,33 @@ export default function App() {
       ctx.strokeStyle = col;
       ctx.lineWidth = 2;
       ctx.stroke();
-
-      // Icon
       ctx.font = "13px sans-serif";
       ctx.textAlign = "center";
       const icons = { detected:"👁", arrived:"📍", alive:"✅", not_alive:"❌" };
       ctx.fillText(icons[flag.flag_type] || "●", fx, fy + 5);
       ctx.textAlign = "left";
-
-      // Label
       ctx.fillStyle = col;
       ctx.font = "10px monospace";
       ctx.fillText(flag.label || FLAG_LABELS[flag.flag_type] || flag.flag_type, fx + 13, fy - 2);
       ctx.fillStyle = "rgba(255,255,255,0.5)";
-      const d = new Date(flag.ts * 1000);
-      ctx.fillText(d.toLocaleTimeString(), fx + 13, fy + 10);
+      ctx.fillText(new Date(flag.ts * 1000).toLocaleTimeString(), fx + 13, fy + 10);
     });
 
-    // Rover icon
+    // Rover
     const rx = wx(mapState.rover_x);
     const ry = wy(mapState.rover_y);
-    const h  = mapState.rover_heading;  // radians
-
     ctx.save();
     ctx.translate(rx, ry);
-    ctx.rotate(h);
-
-    // body
+    ctx.rotate(mapState.rover_heading);
     ctx.fillStyle = "#22c55e";
     ctx.beginPath();
-    ctx.roundRect(-8, -12, 16, 24, 4);
+    ctx.rect(-8, -12, 16, 24);
     ctx.fill();
-
-    // arrow
     ctx.fillStyle = "white";
     ctx.beginPath();
-    ctx.moveTo(0, -14);
-    ctx.lineTo(5, -6);
-    ctx.lineTo(-5, -6);
+    ctx.moveTo(0, -14); ctx.lineTo(5, -6); ctx.lineTo(-5, -6);
     ctx.closePath();
     ctx.fill();
-
     ctx.restore();
   }, [mapState]);
 
@@ -400,7 +369,7 @@ export default function App() {
     return () => clearInterval(id);
   }, [token]);
 
-  // Keyboard control for drive modal
+  // Keyboard for drive modal
   useEffect(() => {
     if (!driveModalOpen || driveMode === "AUTO") return;
     let activeKey = null;
@@ -442,25 +411,26 @@ export default function App() {
         setDetections(Array.isArray(data.detections) ? data.detections : []);
 
         if (data.mmwave) {
-          setMmwaveStatus(data.mmwave.status || "NO PRESENCE DETECTED");
+          setMmwaveStatus(data.mmwave.status || "SENSOR DISABLED");
           setMmwaveRespiration(data.mmwave.respiration_detected || false);
           setMmwaveDistance(data.mmwave.distance || 0);
           setMmwaveEnergyMin(data.mmwave.energy_min || 0);
           setMmwaveEnergyMax(data.mmwave.energy_max || 0);
           setMmwaveEnergyDelta(data.mmwave.energy_delta || 0);
-          setMmwaveEnabled(data.mmwave.enabled !== false);
+          setMmwaveEnabled(data.mmwave.enabled === true);
         }
 
         if (data.drive_mode) setDriveMode(data.drive_mode);
 
-        // Alert from backend (rover arrived at human)
-        if (data.alert && data.alert.active && data.alert.ts !== prevAlertRef.current) {
-          prevAlertRef.current = data.alert.ts;
+        // Alert from Jetson — rover arrived at human
+        // Only trigger if alert is active AND it's a new alert (new ts)
+        if (data.alert &&
+            data.alert.active === true &&
+            data.alert.ts > 0 &&
+            data.alert.ts !== prevAlertTsRef.current) {
+          prevAlertTsRef.current = data.alert.ts;
           playSirenLoop();
-          setSirenActive(true);
-          // Show life confirm panel — find latest "arrived" flag
-          const arrivedFlag = (mapState.flags || []).slice().reverse().find(f => f.flag_type === "arrived");
-          setLifeConfirmFlag(arrivedFlag || { flag_type: "arrived" });
+          setArrivalPopup(true);
         }
 
         const count = data.human_count ?? 0;
@@ -474,7 +444,7 @@ export default function App() {
     return () => { mounted = false; clearInterval(id); };
   }, [token, refreshRateMs, showOverlays, alertSound]);
 
-  // ── polling: map state ────────────────────────────────────────────────────
+  // ── polling: map ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
     fetchMapState();
@@ -523,12 +493,10 @@ export default function App() {
     if (mmwaveStatus.includes("LIFE CONFIRMED")) return "HIGH";
     if (mmwaveStatus.includes("LIFE DOUBTFUL"))  return "MEDIUM";
     if (mmwaveStatus.includes("NO PRESENCE"))    return "NO PRESENCE";
+    if (mmwaveStatus.includes("DISABLED"))       return "SENSOR OFF";
     return "UNKNOWN";
   };
 
-  const latestHistory = historyRows.length > 0 ? historyRows[0] : null;
-
-  // ── LOGIN SCREEN ──────────────────────────────────────────────────────────
   const doLogin = async () => {
     setLoginError("");
     try {
@@ -547,6 +515,9 @@ export default function App() {
     } catch { setLoginError("Backend not reachable."); }
   };
 
+  const latestHistory = historyRows.length > 0 ? historyRows[0] : null;
+
+  // ── LOGIN SCREEN ──────────────────────────────────────────────────────────
   if (!token) {
     return (
       <div style={{ background:"#070b14", minHeight:"100vh", display:"grid", placeItems:"center", padding:20, color:"white", fontFamily:"system-ui" }}>
@@ -578,37 +549,57 @@ export default function App() {
   return (
     <div className="appShell" style={{ "--bg": bgColor }}>
 
-      {/* Siren / Life Confirm overlay */}
-      {sirenActive && (
-        <div style={{ position:"fixed", inset:0, zIndex:100, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#0f1a2b", border:"2px solid #ef4444", borderRadius:24, padding:36, maxWidth:480, width:"90%", textAlign:"center" }}>
+      {/* ── ARRIVAL POPUP: siren + mmWave toggle ──────────────────────────── */}
+      {arrivalPopup && (
+        <div style={{ position:"fixed", inset:0, zIndex:100, background:"rgba(0,0,0,0.88)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#0f1a2b", border:"2px solid #ef4444", borderRadius:24, padding:36, maxWidth:460, width:"90%", textAlign:"center" }}>
             <div style={{ fontSize:64, marginBottom:12 }}>🚨</div>
             <div style={{ fontSize:22, fontWeight:1000, color:"#ef4444", letterSpacing:1 }}>ROVER ARRIVED AT HUMAN</div>
-            <div style={{ opacity:0.75, marginTop:8, fontSize:14 }}>mmWave: {mmwaveStatus}</div>
-            <div style={{ marginTop:8, fontSize:14, opacity:0.7 }}>Distance: {mmwaveDistance.toFixed(2)}m</div>
-            <div style={{ marginTop:24, fontSize:15, fontWeight:900 }}>Confirm Life Status:</div>
-            <div style={{ display:"flex", gap:14, marginTop:14, justifyContent:"center" }}>
-              <button onClick={() => confirmLife("alive")}
-                style={{ flex:1, padding:"14px 0", borderRadius:14, border:"2px solid #22c55e", background:"rgba(34,197,94,0.2)", color:"#22c55e", fontWeight:900, fontSize:16, cursor:"pointer" }}>
-                ✅ ALIVE
-              </button>
-              <button onClick={() => confirmLife("not_alive")}
-                style={{ flex:1, padding:"14px 0", borderRadius:14, border:"2px solid #ef4444", background:"rgba(239,68,68,0.2)", color:"#ef4444", fontWeight:900, fontSize:16, cursor:"pointer" }}>
-                ❌ NOT ALIVE
+            <div style={{ opacity:0.75, marginTop:8, fontSize:14 }}>Siren is active. Use mmWave sensor to check for life signs.</div>
+
+            <div style={{ marginTop:24, padding:16, borderRadius:14, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.04)" }}>
+              <div style={{ fontSize:13, opacity:0.75, marginBottom:10 }}>mmWave Sensor Status</div>
+              <div style={{ fontSize:16, fontWeight:900, color: mmwaveEnabled ? "#22c55e" : "#ef4444", marginBottom:14 }}>
+                {mmwaveEnabled ? "🟢 SENSOR ON" : "🔴 SENSOR OFF"}
+              </div>
+              <div style={{ fontSize:13, opacity:0.85, marginBottom:14 }}>{mmwaveStatus}</div>
+
+              {/* Turn ON / OFF mmWave */}
+              <button onClick={toggleMmwave}
+                style={{ width:"100%", padding:"14px 0", borderRadius:14,
+                  border: mmwaveEnabled ? "2px solid #ef4444" : "2px solid #22c55e",
+                  background: mmwaveEnabled ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)",
+                  color: mmwaveEnabled ? "#ef4444" : "#22c55e",
+                  fontWeight:900, fontSize:16, cursor:"pointer" }}>
+                {mmwaveEnabled ? "🔴 TURN OFF mmWave" : "🟢 TURN ON mmWave"}
               </button>
             </div>
-            <button onClick={stopSiren} style={{ marginTop:18, width:"100%", padding:"10px 0", borderRadius:12, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.06)", color:"white", cursor:"pointer", fontSize:13 }}>
-              Dismiss siren (confirm later on map)
+
+            {/* Energy readings (visible when ON) */}
+            {mmwaveEnabled && (
+              <div style={{ marginTop:14, display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+                {[["Min", mmwaveEnergyMin], ["Max", mmwaveEnergyMax], ["Delta", mmwaveEnergyDelta]].map(([lbl, val]) => (
+                  <div key={lbl} style={{ padding:10, borderRadius:12, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.04)" }}>
+                    <div style={{ fontSize:11, opacity:0.6 }}>Energy {lbl}</div>
+                    <div style={{ fontSize:20, fontWeight:1000 }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button onClick={dismissArrivalPopup}
+              style={{ marginTop:18, width:"100%", padding:"10px 0", borderRadius:12, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.06)", color:"white", cursor:"pointer", fontSize:13 }}>
+              ✕ Dismiss & Stop Siren
             </button>
           </div>
         </div>
       )}
 
       <aside className="sidebar">
-        <button className={`navItem ${tab==="home"?"active":""}`}    onClick={() => setTab("home")}>Home</button>
-        <button className={`navItem ${tab==="map"?"active":""}`}     onClick={() => setTab("map")}>🗺 Map</button>
-        <button className={`navItem ${tab==="history"?"active":""}`} onClick={() => setTab("history")}>History</button>
-        <button className={`navItem ${tab==="settings"?"active":""}`}onClick={() => setTab("settings")}>Settings</button>
+        <button className={`navItem ${tab==="home"?"active":""}`}     onClick={() => setTab("home")}>Home</button>
+        <button className={`navItem ${tab==="map"?"active":""}`}      onClick={() => setTab("map")}>🗺 Map</button>
+        <button className={`navItem ${tab==="history"?"active":""}`}  onClick={() => setTab("history")}>History</button>
+        <button className={`navItem ${tab==="settings"?"active":""}`} onClick={() => setTab("settings")}>Settings</button>
         <button className="navItem" onClick={() => setDriveModalOpen(true)}
           style={{ background:"rgba(34,197,94,0.18)", borderColor:"rgba(34,197,94,0.32)" }}>
           🚗 DRIVE
@@ -619,13 +610,19 @@ export default function App() {
         <div className="topbar">
           <div className="brand">ROBOSAFE</div>
           <div className="topActions">
-            {/* Drive mode toggle */}
             <button onClick={toggleDriveMode}
-              style={{ padding:"8px 16px", borderRadius:12, border:`2px solid ${driveMode==="AUTO"?"rgba(34,197,94,0.6)":"rgba(245,158,11,0.6)"}`,
-                background:driveMode==="AUTO"?"rgba(34,197,94,0.15)":"rgba(245,158,11,0.15)",
+              style={{ padding:"8px 16px", borderRadius:12,
+                border:`2px solid ${driveMode==="AUTO"?"rgba(34,197,94,0.6)":"rgba(245,158,11,0.6)"}`,
+                background: driveMode==="AUTO"?"rgba(34,197,94,0.15)":"rgba(245,158,11,0.15)",
                 color:"white", fontWeight:900, fontSize:13, cursor:"pointer" }}>
               {driveMode === "AUTO" ? "🤖 AUTO" : "🕹 MANUAL"}
             </button>
+            {sirenActive && (
+              <button onClick={stopSiren}
+                style={{ padding:"8px 14px", borderRadius:12, border:"2px solid #ef4444", background:"rgba(239,68,68,0.2)", color:"#ef4444", fontWeight:900, fontSize:13, cursor:"pointer", animation:"pulse 1s infinite" }}>
+                🔇 STOP SIREN
+              </button>
+            )}
             <div style={{ fontSize:12, opacity:0.75 }}>Alert: {alertSound}</div>
             <button className="iconBtn" title="Lock" onClick={() => { setLocked(true); setToken(null); }}>🔒</button>
           </div>
@@ -640,7 +637,7 @@ export default function App() {
                 <div className="card">
                   <div className="gaugeWrap"><Gauge value={thermalCount} color="blue" /></div>
                   <div className="cardTitle" style={{ textAlign:"center" }}>THERMAL CAMERA DETECTED</div>
-                  <div className="cardSub" style={{ textAlign:"center" }}>{thermalCount} humans detected</div>
+                  <div className="cardSub"   style={{ textAlign:"center" }}>{thermalCount} humans detected</div>
                   <div style={{ textAlign:"center" }}>
                     <span className="btnPill" onClick={() => setDetailsModalOpen(true)} style={{ cursor:"pointer" }}>VIEW DETAILS</span>
                   </div>
@@ -648,14 +645,14 @@ export default function App() {
 
                 <div className="card">
                   <div className="gaugeWrap"><ConfirmationBadge status={mmwaveStatus} respiration={mmwaveRespiration} /></div>
-                  <div className="cardTitle" style={{ textAlign:"center" }}>MM WAVE CONFIRMATION</div>
-                  <div className="cardSub" style={{ textAlign:"center" }}>{mmwaveStatus}</div>
+                  <div className="cardTitle" style={{ textAlign:"center" }}>MM WAVE SENSOR</div>
+                  <div className="cardSub"   style={{ textAlign:"center" }}>{mmwaveStatus}</div>
                   <div style={{ textAlign:"center", display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
-                    <span className="btnPill" onClick={() => setLifeDetectionModalOpen(true)} style={{ cursor:"pointer" }}>LIFE DETECTION</span>
+                    <span className="btnPill" onClick={() => setLifeDetectionModalOpen(true)} style={{ cursor:"pointer" }}>VIEW READINGS</span>
                     <span className="btnPill" onClick={toggleMmwave} style={{ cursor:"pointer",
                       background: mmwaveEnabled ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
                       borderColor: mmwaveEnabled ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)" }}>
-                      {mmwaveEnabled ? "ON" : "OFF"}
+                      {mmwaveEnabled ? "🟢 ON" : "🔴 OFF"}
                     </span>
                   </div>
                 </div>
@@ -689,8 +686,7 @@ export default function App() {
                     Rover: ({mapState.rover_x.toFixed(2)}m, {mapState.rover_y.toFixed(2)}m) · {mapState.flags.length} flags
                   </div>
                 </div>
-                <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                  {/* Legend */}
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
                   {Object.entries(FLAG_LABELS).map(([k,v]) => (
                     <div key={k} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12 }}>
                       <div style={{ width:12, height:12, borderRadius:999, background:FLAG_COLORS[k] }} />
@@ -702,13 +698,9 @@ export default function App() {
                   </button>
                 </div>
               </div>
-
-              <div style={{ borderRadius:22, overflow:"hidden", border:"1px solid rgba(255,255,255,0.1)", position:"relative" }}>
-                <canvas ref={mapCanvasRef} width={900} height={560}
-                  style={{ display:"block", width:"100%", background:"#0a1020" }} />
+              <div style={{ borderRadius:22, overflow:"hidden", border:"1px solid rgba(255,255,255,0.1)" }}>
+                <canvas ref={mapCanvasRef} width={900} height={560} style={{ display:"block", width:"100%", background:"#0a1020" }} />
               </div>
-
-              {/* Flag list */}
               {mapState.flags.length > 0 && (
                 <div style={{ marginTop:14, display:"grid", gap:8 }}>
                   <div style={{ fontWeight:900, fontSize:14, opacity:0.75 }}>FLAG LOG</div>
@@ -720,13 +712,6 @@ export default function App() {
                         <div style={{ fontSize:11, opacity:0.6 }}>{flag.label} · ({flag.x.toFixed(2)}m, {flag.y.toFixed(2)}m)</div>
                       </div>
                       <div style={{ fontSize:11, opacity:0.5 }}>{new Date(flag.ts * 1000).toLocaleTimeString()}</div>
-                      {/* Life confirm buttons if arrived flag has no result yet */}
-                      {flag.flag_type === "arrived" && (
-                        <div style={{ display:"flex", gap:6 }}>
-                          <button onClick={() => confirmLife("alive")} style={{ padding:"4px 10px", borderRadius:8, border:"1px solid #22c55e", background:"rgba(34,197,94,0.15)", color:"#22c55e", cursor:"pointer", fontSize:11, fontWeight:900 }}>✅ Alive</button>
-                          <button onClick={() => confirmLife("not_alive")} style={{ padding:"4px 10px", borderRadius:8, border:"1px solid #ef4444", background:"rgba(239,68,68,0.15)", color:"#ef4444", cursor:"pointer", fontSize:11, fontWeight:900 }}>❌ Not Alive</button>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -752,7 +737,10 @@ export default function App() {
                   <button className="iconBtn" style={{ width:160, background:"rgba(239,68,68,0.18)", border:"1px solid rgba(239,68,68,0.35)" }}
                     onClick={async () => {
                       if (!window.confirm("Delete all history?")) return;
-                      try { await fetch(`${API_BASE}/api/history`, { method:"DELETE", headers:{ Authorization:`Bearer ${token}` } }); setHistoryRows([]); } catch {}
+                      try {
+                        await fetch(`${API_BASE}/api/history`, { method:"DELETE", headers:{ Authorization:`Bearer ${token}` } });
+                        setHistoryRows([]);
+                      } catch {}
                     }}>DELETE HISTORY</button>
                 </div>
               </div>
@@ -812,8 +800,8 @@ export default function App() {
                 </div>
                 <div style={{ marginTop:18, padding:14, borderRadius:14, border:"1px solid rgba(255,255,255,0.10)", background:"rgba(255,255,255,0.03)" }}>
                   <div style={{ fontWeight:1000, marginBottom:10 }}>Change Password</div>
-                  <PwRow label="Current Password" value={curPw} setValue={setCurPw} show={showCurPw} setShow={setShowCurPw} />
-                  <PwRow label="New Password"     value={newPw} setValue={setNewPw} show={showNewPw} setShow={setShowNewPw} />
+                  <PwRow label="Current Password" value={curPw}  setValue={setCurPw}  show={showCurPw}  setShow={setShowCurPw}  />
+                  <PwRow label="New Password"     value={newPw}  setValue={setNewPw}  show={showNewPw}  setShow={setShowNewPw}  />
                   <PwRow label="Confirm Password" value={newPw2} setValue={setNewPw2} show={showNewPw2} setShow={setShowNewPw2} />
                   {pwMsg && <div style={{ marginTop:10, fontSize:13, opacity:0.85 }}>{pwMsg}</div>}
                   <button className="iconBtn" style={{ width:220, marginTop:12 }} onClick={changePassword}>UPDATE PASSWORD</button>
@@ -824,7 +812,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── LIVE FEED MODAL ─────────────────────────────────────────────────── */}
+      {/* ── MODALS ────────────────────────────────────────────────────────────── */}
+
       {modalOpen && (
         <div className="modalOverlay" onClick={() => setModalOpen(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -842,7 +831,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ── DETAILS MODAL ───────────────────────────────────────────────────── */}
       {detailsModalOpen && (
         <div className="modalOverlay" onClick={() => setDetailsModalOpen(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -850,7 +838,7 @@ export default function App() {
               <div style={{ fontWeight:1000 }}>THERMAL CAMERA DETAILS</div>
               <button className="iconBtn" onClick={() => setDetailsModalOpen(false)}>✕</button>
             </div>
-            <div className="modalBody" style={{ padding:20 }}>
+            <div className="modalBody" style={{ padding:20, overflow:"auto" }}>
               <div style={{ fontSize:48, fontWeight:1000 }}>{thermalCount}</div>
               <div style={{ fontSize:18, opacity:0.85, marginTop:10 }}>Humans detected</div>
               {detections.map((d, i) => (
@@ -864,12 +852,11 @@ export default function App() {
         </div>
       )}
 
-      {/* ── LIFE DETECTION MODAL ────────────────────────────────────────────── */}
       {lifeDetectionModalOpen && (
         <div className="modalOverlay" onClick={() => setLifeDetectionModalOpen(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modalTop">
-              <div style={{ fontWeight:1000 }}>LIFE DETECTION ANALYSIS</div>
+              <div style={{ fontWeight:1000 }}>mmWave READINGS</div>
               <button className="iconBtn" onClick={() => setLifeDetectionModalOpen(false)}>✕</button>
             </div>
             <div className="modalBody" style={{ padding:20, overflow:"auto" }}>
@@ -893,12 +880,18 @@ export default function App() {
                 <div style={{ fontSize:12, opacity:0.7 }}>Distance</div>
                 <div style={{ fontSize:28, fontWeight:1000 }}>{mmwaveDistance.toFixed(2)}m</div>
               </div>
+              <div style={{ marginTop:16, textAlign:"center" }}>
+                <span className="btnPill" onClick={toggleMmwave} style={{ cursor:"pointer",
+                  background: mmwaveEnabled ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
+                  borderColor: mmwaveEnabled ? "rgba(239,68,68,0.35)" : "rgba(34,197,94,0.35)" }}>
+                  {mmwaveEnabled ? "🔴 TURN OFF mmWave" : "🟢 TURN ON mmWave"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── DRIVE MODAL ─────────────────────────────────────────────────────── */}
       {driveModalOpen && (
         <div className="modalOverlay" onClick={() => setDriveModalOpen(false)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ height:"min(820px,94vh)" }}>
@@ -906,8 +899,10 @@ export default function App() {
               <div style={{ fontWeight:1000 }}>🚗 ROVER CONTROL</div>
               <div style={{ display:"flex", gap:10, alignItems:"center" }}>
                 <button onClick={toggleDriveMode}
-                  style={{ padding:"6px 14px", borderRadius:10, border:`2px solid ${driveMode==="AUTO"?"rgba(34,197,94,0.6)":"rgba(245,158,11,0.6)"}`,
-                    background:driveMode==="AUTO"?"rgba(34,197,94,0.15)":"rgba(245,158,11,0.15)", color:"white", fontWeight:900, fontSize:12, cursor:"pointer" }}>
+                  style={{ padding:"6px 14px", borderRadius:10,
+                    border:`2px solid ${driveMode==="AUTO"?"rgba(34,197,94,0.6)":"rgba(245,158,11,0.6)"}`,
+                    background: driveMode==="AUTO"?"rgba(34,197,94,0.15)":"rgba(245,158,11,0.15)",
+                    color:"white", fontWeight:900, fontSize:12, cursor:"pointer" }}>
                   {driveMode==="AUTO" ? "🤖 AUTO" : "🕹 MANUAL"}
                 </button>
                 <button className="iconBtn" onClick={() => setDriveModalOpen(false)}>✕</button>
@@ -934,11 +929,11 @@ export default function App() {
                     </div>
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:10 }}>
                       <div />
-                      <ControlButton label="⬆ FORWARD" active={activeCommand==="FORWARD"} onMouseDown={() => startContinuousClick("FORWARD")} onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("FORWARD")} onTouchEnd={stopContinuousClick} />
+                      <ControlButton label="⬆ FORWARD"  active={activeCommand==="FORWARD"}  onMouseDown={() => startContinuousClick("FORWARD")}  onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("FORWARD")}  onTouchEnd={stopContinuousClick} />
                       <div />
-                      <ControlButton label="⬅ LEFT"    active={activeCommand==="LEFT"}    onMouseDown={() => startContinuousClick("LEFT")}    onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("LEFT")}    onTouchEnd={stopContinuousClick} />
-                      <ControlButton label="⏹ STOP"   active={activeCommand==="STOP"}    onMouseDown={() => startContinuousClick("STOP")}    onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("STOP")}    onTouchEnd={stopContinuousClick} variant="stop" />
-                      <ControlButton label="➡ RIGHT"   active={activeCommand==="RIGHT"}   onMouseDown={() => startContinuousClick("RIGHT")}   onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("RIGHT")}   onTouchEnd={stopContinuousClick} />
+                      <ControlButton label="⬅ LEFT"     active={activeCommand==="LEFT"}     onMouseDown={() => startContinuousClick("LEFT")}     onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("LEFT")}     onTouchEnd={stopContinuousClick} />
+                      <ControlButton label="⏹ STOP"    active={activeCommand==="STOP"}    onMouseDown={() => startContinuousClick("STOP")}    onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("STOP")}    onTouchEnd={stopContinuousClick} variant="stop" />
+                      <ControlButton label="➡ RIGHT"    active={activeCommand==="RIGHT"}    onMouseDown={() => startContinuousClick("RIGHT")}    onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("RIGHT")}    onTouchEnd={stopContinuousClick} />
                       <div />
                       <ControlButton label="⬇ BACKWARD" active={activeCommand==="BACKWARD"} onMouseDown={() => startContinuousClick("BACKWARD")} onMouseUp={stopContinuousClick} onMouseLeave={stopContinuousClick} onTouchStart={() => startContinuousClick("BACKWARD")} onTouchEnd={stopContinuousClick} />
                       <div />
@@ -953,7 +948,7 @@ export default function App() {
                   <div style={{ fontSize:12, fontWeight:900, opacity:0.75 }}>COMMAND LOG</div>
                   <div style={{ marginTop:8, height:"calc(100% - 24px)", overflowY:"auto", fontSize:11, fontFamily:"monospace", background:"rgba(0,0,0,0.35)", borderRadius:12, padding:10, border:"1px solid rgba(255,255,255,0.08)" }}>
                     {commandHistory.map((entry, idx) => (
-                      <div key={idx} style={{ padding:"4px 0", borderBottom: idx < commandHistory.length-1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                      <div key={idx} style={{ padding:"4px 0", borderBottom: idx < commandHistory.length-1 ? "1px solid rgba(255,255,255,0.05)":"none" }}>
                         <span style={{ opacity:0.6 }}>{new Date(entry.ts).toLocaleTimeString()}</span> → {entry.cmd}
                       </div>
                     ))}
@@ -968,17 +963,23 @@ export default function App() {
   );
 }
 
-// ── Sub-components (unchanged from Phase 1) ───────────────────────────────────
+// ── Sub-components ────────────────────────────────────────────────────────────
 function ConfirmationBadge({ status, respiration }) {
   const isLifeConfirmed = status?.includes("LIFE CONFIRMED");
   const isLifeDoubtful  = status?.includes("LIFE DOUBTFUL");
+  const isDisabled      = status?.includes("DISABLED");
   return (
     <div style={{ width:220, height:110, borderRadius:20, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
       background: isLifeConfirmed?"rgba(34,197,94,0.15)":isLifeDoubtful?"rgba(245,158,11,0.15)":"rgba(100,100,100,0.15)",
       border:`2px solid ${isLifeConfirmed?"rgba(34,197,94,0.45)":isLifeDoubtful?"rgba(245,158,11,0.45)":"rgba(150,150,150,0.35)"}`,
       boxShadow: isLifeConfirmed?"0 0 30px rgba(34,197,94,0.25)":"none" }}>
-      <div style={{ fontSize:48, marginBottom:8 }}>{isLifeConfirmed?"✓":isLifeDoubtful?"⚠":"○"}</div>
-      <div style={{ fontSize:11, fontWeight:900, textAlign:"center", color:isLifeConfirmed?"rgba(34,197,94,0.95)":isLifeDoubtful?"rgba(245,158,11,0.95)":"rgba(150,150,150,0.85)" }}>{status}</div>
+      <div style={{ fontSize:48, marginBottom:8 }}>
+        {isDisabled ? "⚫" : isLifeConfirmed ? "✓" : isLifeDoubtful ? "⚠" : "○"}
+      </div>
+      <div style={{ fontSize:11, fontWeight:900, textAlign:"center",
+        color: isLifeConfirmed?"rgba(34,197,94,0.95)":isLifeDoubtful?"rgba(245,158,11,0.95)":"rgba(150,150,150,0.85)" }}>
+        {status}
+      </div>
       {respiration && <div style={{ fontSize:10, opacity:0.75, marginTop:4 }}>♥ Breathing</div>}
     </div>
   );
@@ -986,11 +987,14 @@ function ConfirmationBadge({ status, respiration }) {
 
 function ControlButton({ label, active, onMouseDown, onMouseUp, onMouseLeave, onTouchStart, onTouchEnd, variant }) {
   return (
-    <button onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
-      style={{ height:70, borderRadius:16, border: active?"2px solid rgba(34,197,94,0.65)":"1px solid rgba(255,255,255,0.12)",
+    <button onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+      style={{ height:70, borderRadius:16,
+        border: active?"2px solid rgba(34,197,94,0.65)":"1px solid rgba(255,255,255,0.12)",
         background: active?"rgba(34,197,94,0.25)":variant==="stop"?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.05)",
         color:"white", cursor:"pointer", fontWeight:900, fontSize:13,
-        boxShadow: active?"0 0 20px rgba(34,197,94,0.35)":"none", transition:"all 0.15s ease", userSelect:"none" }}>
+        boxShadow: active?"0 0 20px rgba(34,197,94,0.35)":"none",
+        transition:"all 0.15s ease", userSelect:"none" }}>
       {label}
     </button>
   );
