@@ -545,7 +545,7 @@ export default function App() {
   };
 
   const latestHistory = historyRows.length > 0 ? historyRows[0] : null;
-  const videoSrc      = `${API_BASE}/video?token=${encodeURIComponent(token || "")}`;
+  const videoSrc = "http://192.168.29.6:5000/stream";
 
   // LOGIN
   if (!token) {
