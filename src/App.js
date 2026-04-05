@@ -545,8 +545,7 @@ export default function App() {
   };
 
   const latestHistory = historyRows.length > 0 ? historyRows[0] : null;
-  const videoSrc = "http://192.168.29.6:5000/stream";
-
+  const videoSrc = "http://192.168.225.183:5000/stream";
   // LOGIN
   if (!token) {
     return (
